@@ -1,0 +1,122 @@
+import tensorflow as tf
+from tensorflow.keras import layers, models
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+import os 
+os.environ['KMP_DUPLICATE_LIB_OK']='True'
+
+# Specify the path to the dataset
+
+dataset_path = r"C:\Users\bhard\Desktop\soya"
+
+# Specify input shape and number of classes
+input_shape = (227, 227, 3)  # Adjust input shape based on your data
+num_classes = 5  # Number of soybean seed types in the dataset
+
+# Create the AlexNet-like model
+def create_alexnet_model(input_shape, num_classes):
+    model = models.Sequential()
+
+    # Layer 1
+    model.add(layers.Conv2D(96, (11, 11), strides=(4, 4), activation='relu', input_shape=input_shape))
+    model.add(layers.MaxPooling2D((3, 3), strides=(2, 2)))
+
+    # Layer 2
+    model.add(layers.Conv2D(256, (5, 5), activation='relu'))
+    model.add(layers.MaxPooling2D((3, 3), strides=(2, 2)))
+
+    # Layer 3
+    model.add(layers.Conv2D(384, (3, 3), activation='relu'))
+
+    # Layer 4
+    model.add(layers.Conv2D(384, (3, 3), activation='relu'))
+
+    # Layer 5
+    model.add(layers.Conv2D(256, (3, 3), activation='relu'))
+    model.add(layers.MaxPooling2D((3, 3), strides=(2, 2)))
+
+    # Flatten and fully connected layers
+    model.add(layers.Flatten())
+    model.add(layers.Dense(4096, activation='relu'))
+    model.add(layers.Dropout(0.5))
+    model.add(layers.Dense(4096, activation='relu'))
+    model.add(layers.Dropout(0.5))
+
+    # Output layer
+    model.add(layers.Dense(num_classes, activation='softmax'))
+
+    return model
+
+
+
+# Data loading and preprocessing for training and testing data
+train_datagen = ImageDataGenerator(rescale=1./255,
+                                   shear_range=0.2,
+                                   zoom_range=0.2,
+                                   horizontal_flip=True,
+                                   validation_split=0.2)  # Split data into training and validation sets
+
+train_generator = train_datagen.flow_from_directory(
+    dataset_path,
+    target_size=(227, 227),
+    batch_size=8,
+    class_mode='categorical',
+    subset='training'  # Specify training set
+)
+
+validation_generator = train_datagen.flow_from_directory(
+    dataset_path,
+    target_size=(227, 227),
+    batch_size=8,
+    class_mode='categorical',
+    subset='validation'
+    # Specify validation set
+)
+# Create the AlexNet-like model
+alexnet_model = create_alexnet_model(input_shape, num_classes)
+
+# Compile the model
+alexnet_model.compile(optimizer=Adam(learning_rate=0.0001),
+                      loss='categorical_crossentropy',
+                      metrics=['accuracy'])
+
+# Train the model
+history = alexnet_model.fit(train_generator,
+                             epochs=15,
+                             validation_data=validation_generator,verbose=1)
+
+
+
+# Evaluate the model on the validation data
+validation_loss, validation_accuracy = alexnet_model.evaluate(validation_generator)
+print(f'Validation Accuracy: {validation_accuracy * 100:.2f}%')
+
+# Save the model
+alexnet_model.save('soybean_seed___.h5')
+
+test_loss, test_accuracy = alexnet_model.evaluate(validation_generator)
+print(f'Test Accuracy: {test_accuracy * 100:.2f}%')
+
+
+
+
+
+from tensorflow.keras.models import load_model
+import numpy as np
+
+from sklearn.metrics import classification_report, confusion_matrix
+loaded_model = load_model('soybean_seed___.h5')
+# Make predictions on the validation data
+validation_predictions = loaded_model.predict(validation_generator)
+
+# Convert one-hot encoded labels to class indices
+y_true = validation_generator.classes
+y_pred = np.argmax(validation_predictions, axis=1)
+
+# Classification Report
+class_report = classification_report(y_true, y_pred, target_names=train_generator.class_indices.keys())
+print("Classification Report:\n", class_report)
+
+# Confusion Matrix
+conf_matrix = confusion_matrix(y_true, y_pred)
+print("Confusion Matrix:\n", conf_matrix)
